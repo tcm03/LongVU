@@ -1,7 +1,5 @@
 huggingface_hub==0.25.1
-torch==2.1.2
 numpy==1.26.4
-torchvision
 transformers==4.42.4
 tokenizers==0.19.1
 sentencepiece==0.1.99
@@ -26,3 +24,7 @@ ninja
 deepspeed==0.12.2
 protobuf
 iopath
+pandas
+tqdm
+pytube
+matplotlib
