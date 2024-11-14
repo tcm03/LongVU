@@ -1,3 +1,6 @@
+import sys
+sys.path.append('/kaggle/working/LongVU')
+
 import numpy as np
 import pandas as pd
 import argparse
@@ -17,41 +20,50 @@ from longvu.mm_datautils import (
 from decord import cpu, VideoReader
 from huggingface_hub import snapshot_download
 
-def val(args):
+def eval(args):
 
     model_path = args.model_path
     model_name = args.model_name
     data_path = args.data_path
+    version = args.version
 
-    model_id = "Vision-CAIR/LongVU_Llama3_2_3B"
-    snapshot_download(repo_id=model_id, local_dir=model_path)
+    # model_id = "Vision-CAIR/LongVU_Llama3_2_3B"
+    # snapshot_download(repo_id=model_id, local_dir=model_path)
 
     tokenizer, model, image_processor, context_len = load_pretrained_model(
         model_path, None, model_name,
     )
 
-    df = pd.read_csv("EnTube_filtered.csv")
+    df = pd.read_csv("EnTube/EnTube_filtered.csv")
     for i, row in df.iterrows():    
 
         model.eval()
         label = row['engagement_rate_label']
         video_path = os.path.join(data_path, str(label), row['video_id'] + ".mp4")
-        qs = "This video is a Youtube video on one of the following categories: Education, Film & Animation, Comedy, Entertainment, Music, Howto & Style, and People & Blogs. The engagement rate defined for each such video is based on the number of potential likes and dislikes only when published on Youtube. The exact formula for the score is (likes-dislikes) / (likes+dislikes) and the final prediction label is either 0 (not engaged), 1 (neutral), or 2 (engaged) based on thresholding this score. Please predict one of the three labels for this video, based on its contents only."
+        print(f"video_id: {row['video_id']}")
+        # qs = "This video is a Youtube video on one of the following categories: Education, Film & Animation, Comedy, Entertainment, Music, Howto & Style, and People & Blogs. The engagement rate defined for each such video is based on the number of potential likes and dislikes only when published on Youtube. The exact formula for the score is (likes-dislikes) / (likes+dislikes) and the final prediction label is either 0 (not engaged), 1 (neutral), or 2 (engaged) based on thresholding this score. Please predict one of the three labels for this video, based on its contents only."
+        # qs = "Classify this video into one of three engagement levels by printing out ONLY a character of 0, 1, or 2, corresponding to being not engaged, neutral, or engaged, respectively."
+        # qs = "Please print out either 0, 1, or 2 (corresponding to the video being not engaged, neutral, or engaged)."
+        qs = "Please print out either 0, 1, or 2."
 
         vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
         fps = float(vr.get_avg_fps())
-        frame_indices = np.array([i for i in range(0, len(vr), round(fps),)])
+        # print(f'fps = {fps}')
+        frame_indices = np.array([i for i in range(0, len(vr), round(fps*4),)]) # @tcm: for cuda memory limit
+        # print(f'frame_indices = {frame_indices}')
         video = []
         for frame_index in frame_indices:
             img = vr[frame_index].asnumpy()
             video.append(img)
         video = np.stack(video)
         image_sizes = [video[0].shape[:2]]
+        # print(f'image_sizes = {image_sizes}')
         video = process_images(video, image_processor, model.config)
         video = [item.unsqueeze(0) for item in video]
+        # print(video[:2])
 
-        qs = DEFAULT_IMAGE_TOKEN + "\n" + qs
-        conv = conv_templates["qwen"].copy()
+        qs = DEFAULT_IMAGE_TOKEN + "\\n" + qs
+        conv = conv_templates[version].copy()
         conv.append_message(conv.roles[0], qs)
         conv.append_message(conv.roles[1], None)
         prompt = conv.get_prompt()
@@ -61,6 +73,7 @@ def val(args):
         keywords = [stop_str]
         stopping_criteria = KeywordsStoppingCriteria(keywords, tokenizer, input_ids)
         with torch.inference_mode():
+            torch.cuda.empty_cache() # @tcm: for cuda memory limit
             output_ids = model.generate(
                 input_ids,
                 images=video,
@@ -71,19 +84,20 @@ def val(args):
                 use_cache=True,
                 stopping_criteria=[stopping_criteria],
             )
-        pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+        # pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+        pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         print(f"Predicted: {pred}, Actual: {label}")
 
-        if i == 2:
+        if i == 0:
             break
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_path', default="../checkpoints/longvu_llama3_2")
+    parser.add_argument('--model_path', default="./checkpoints/longvu_llama3_2")
     parser.add_argument('--model_name', default="cambrian_llama")
     parser.add_argument('--version', default="llama3")
-    parser.add_argument('--local-rank', default=0)
+    # parser.add_argument('--local-rank', default=0)
     parser.add_argument('--data_path', required=True)
     args = parser.parse_args()
 

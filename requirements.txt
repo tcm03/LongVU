@@ -1,7 +1,7 @@
 huggingface_hub==0.25.1
 numpy==1.26.4
-transformers==4.42.4
-tokenizers==0.19.1
+transformers==4.46.2
+tokenizers==0.20.3
 sentencepiece==0.1.99
 shortuuid
 accelerate==0.34.2
