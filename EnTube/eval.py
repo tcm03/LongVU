@@ -18,7 +18,7 @@ from longvu.mm_datautils import (
     tokenizer_image_token,
 )
 from decord import cpu, VideoReader
-from huggingface_hub import snapshot_download
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 def eval(args):
 
@@ -31,10 +31,12 @@ def eval(args):
     # snapshot_download(repo_id=model_id, local_dir=model_path)
 
     tokenizer, model, image_processor, context_len = load_pretrained_model(
-        model_path, None, model_name,
+        model_path, None, model_name
     )
 
     df = pd.read_csv("EnTube/EnTube_filtered.csv")
+    preds = []
+    truths = []
     for i, row in df.iterrows():    
 
         model.eval()
@@ -43,14 +45,14 @@ def eval(args):
         print(f"video_id: {row['video_id']}")
         # qs = "This video is a Youtube video on one of the following categories: Education, Film & Animation, Comedy, Entertainment, Music, Howto & Style, and People & Blogs. The engagement rate defined for each such video is based on the number of potential likes and dislikes only when published on Youtube. The exact formula for the score is (likes-dislikes) / (likes+dislikes) and the final prediction label is either 0 (not engaged), 1 (neutral), or 2 (engaged) based on thresholding this score. Please predict one of the three labels for this video, based on its contents only."
         # qs = "Classify this video into one of three engagement levels by printing out ONLY a character of 0, 1, or 2, corresponding to being not engaged, neutral, or engaged, respectively."
-        # qs = "Please print out either 0, 1, or 2 (corresponding to the video being not engaged, neutral, or engaged)."
-        qs = "Please print out either 0, 1, or 2."
+        qs = "Please print out either 0, 1, or 2 (corresponding to the video being not engaged, neutral, or engaged)."
+        # qs = "Please print out either 0, 1, or 2."
 
         vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
         fps = float(vr.get_avg_fps())
         # print(f'fps = {fps}')
-        frame_indices = np.array([i for i in range(0, len(vr), round(fps*4),)]) # @tcm: for cuda memory limit
-        # print(f'frame_indices = {frame_indices}')
+        frame_indices = np.array([i for i in range(0, len(vr), round(fps*2),)]) # @tcm: for cuda memory limit
+        print(f'frame_indices = {frame_indices}')
         video = []
         for frame_index in frame_indices:
             img = vr[frame_index].asnumpy()
@@ -86,10 +88,37 @@ def eval(args):
             )
         # pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
         pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-        print(f"Predicted: {pred}, Actual: {label}")
+        # print(f"Predicted: {pred}, Actual: {label}")
+        if len(pred) == 1 and pred[0][-1].isnumeric():
+            preds.append(int(pred[0][-1]))
+            truths.append(label)
 
-        if i == 0:
-            break
+    accuracy = accuracy_score(truths, preds)
+    print(f"Accuracy: {accuracy:.2f}")
+
+    precision = precision_score(truths, preds, average=None)
+    recall = recall_score(truths, preds, average=None)
+    f1 = f1_score(truths, preds, average=None)
+
+    for cls in range(len(precision)):
+        print(f"Class {cls} - Precision: {precision[cls]:.2f}, Recall: {recall[cls]:.2f}, F1-Score: {f1[cls]:.2f}")
+
+    macro_precision = precision_score(truths, preds, average='macro')
+    macro_recall = recall_score(truths, preds, average='macro')
+    macro_f1 = f1_score(truths, preds, average='macro')
+
+    print(f"\nMacro-Average Precision: {macro_precision:.2f}")
+    print(f"Macro-Average Recall: {macro_recall:.2f}")
+    print(f"Macro-Average F1-Score: {macro_f1:.2f}")
+
+    micro_precision = precision_score(truths, preds, average='micro')
+    micro_recall = recall_score(truths, preds, average='micro')
+    micro_f1 = f1_score(truths, preds, average='micro')
+
+    print(f"\nMicro-Average Precision: {micro_precision:.2f}")
+    print(f"Micro-Average Recall: {micro_recall:.2f}")
+    print(f"Micro-Average F1-Score: {micro_f1:.2f}")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
