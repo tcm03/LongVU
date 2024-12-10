@@ -160,6 +160,7 @@ def load_pretrained_model(
                     model_path, low_cpu_mem_usage=True, **kwargs
                 )
             else:
+                print('@tcm: here 1')
                 print(f"Loading Cambrian from {model_path}")
                 tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
                 model = CambrianLlamaForCausalLM.from_pretrained(

@@ -3,6 +3,7 @@ sys.path.append('/kaggle/working/LongVU')
 
 import numpy as np
 import pandas as pd
+import math
 import argparse
 import os
 import torch
@@ -37,8 +38,10 @@ def eval(args):
     df = pd.read_csv("EnTube/EnTube_filtered.csv")
     preds = []
     truths = []
-    for i, row in df.iterrows():    
-
+    for i, row in df.iterrows():
+        print(f"At video {i}")
+        if row['video_id'] == '4RJuIinnP-E':
+            continue # skip partially downloaded video
         model.eval()
         label = row['engagement_rate_label']
         video_path = os.path.join(data_path, str(label), row['video_id'] + ".mp4")
@@ -48,15 +51,23 @@ def eval(args):
         qs = "Please print out either 0, 1, or 2 (corresponding to the video being not engaged, neutral, or engaged)."
         # qs = "Please print out either 0, 1, or 2."
 
+        ###
+        # For Llama 3.2 (3B) and 16GB GPU memory: set # frame <= 56 for each video
+        ###
+
+        FRAME_CONST = 50
         vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
+        # print(f'len(vr) = {len(vr)}')
         fps = float(vr.get_avg_fps())
-        # print(f'fps = {fps}')
-        frame_indices = np.array([i for i in range(0, len(vr), round(fps*4),)]) # @tcm: for cuda memory limit
-        print(f'frame_indices = {frame_indices}')
+        # print(f'avg_fps = {fps}')
+        coeff = len(vr) / (FRAME_CONST*fps)
+        frame_indices = np.array([i for i in range(0, len(vr), math.floor(coeff*fps),)]) # @tcm: for cuda memory limit
+        # print(f'# frames: {frame_indices.shape[0]}')
         video = []
         for frame_index in frame_indices:
             img = vr[frame_index].asnumpy()
             video.append(img)
+        # print(f'frame shape: {img.shape}')
         video = np.stack(video)
         image_sizes = [video[0].shape[:2]]
         # print(f'image_sizes = {image_sizes}')
@@ -64,7 +75,7 @@ def eval(args):
         video = [item.unsqueeze(0) for item in video]
         # print(video[:2])
 
-        qs = DEFAULT_IMAGE_TOKEN + "\\n" + qs
+        qs = DEFAULT_IMAGE_TOKEN + "\n" + qs
         conv = conv_templates[version].copy()
         conv.append_message(conv.roles[0], qs)
         conv.append_message(conv.roles[1], None)
@@ -90,7 +101,7 @@ def eval(args):
         # pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         # print(f"Predicted: {pred}, Actual: {label}")
         if pred[-1].isnumeric():
-            print(f"i={i}")
+            print(f'pred={int(pred[-1])}, label={label}')
             preds.append(int(pred[-1]))
             truths.append(label)
 
@@ -119,6 +130,7 @@ def eval(args):
     print(f"\nMicro-Average Precision: {micro_precision:.2f}")
     print(f"Micro-Average Recall: {micro_recall:.2f}")
     print(f"Micro-Average F1-Score: {micro_f1:.2f}")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
