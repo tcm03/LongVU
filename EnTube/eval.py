@@ -51,7 +51,7 @@ def eval(args):
         vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
         fps = float(vr.get_avg_fps())
         # print(f'fps = {fps}')
-        frame_indices = np.array([i for i in range(0, len(vr), round(fps*2),)]) # @tcm: for cuda memory limit
+        frame_indices = np.array([i for i in range(0, len(vr), round(fps*4),)]) # @tcm: for cuda memory limit
         print(f'frame_indices = {frame_indices}')
         video = []
         for frame_index in frame_indices:
@@ -86,11 +86,12 @@ def eval(args):
                 use_cache=True,
                 stopping_criteria=[stopping_criteria],
             )
-        # pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-        pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+        # pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         # print(f"Predicted: {pred}, Actual: {label}")
-        if len(pred) == 1 and pred[0][-1].isnumeric():
-            preds.append(int(pred[0][-1]))
+        if pred[-1].isnumeric():
+            print(f"i={i}")
+            preds.append(int(pred[-1]))
             truths.append(label)
 
     accuracy = accuracy_score(truths, preds)
@@ -118,7 +119,6 @@ def eval(args):
     print(f"\nMicro-Average Precision: {micro_precision:.2f}")
     print(f"Micro-Average Recall: {micro_recall:.2f}")
     print(f"Micro-Average F1-Score: {micro_f1:.2f}")
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
