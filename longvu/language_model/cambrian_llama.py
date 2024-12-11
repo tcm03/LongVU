@@ -478,6 +478,8 @@ class CambrianLlamaForCausalLM(LlamaForCausalLM, CambrianMetaForCausalLM):
         if "inputs_embeds" in kwargs:
             raise NotImplementedError("`inputs_embeds` is not supported")
 
+        print('@tcm: CambrianLlamaForCausalLM.generate()')
+
         if images is not None:
             (
                 inputs,
@@ -514,9 +516,13 @@ class CambrianLlamaForCausalLM(LlamaForCausalLM, CambrianMetaForCausalLM):
             #  `global_context_feature`.
             self.global_context_feature = global_context_feature
         else:
+            # @tcm: LlamaModel::embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
             inputs_embeds = self.get_model().embed_tokens(inputs)
 
         # pyre-fixme[16]: `LlamaForCausalLM` has no attribute `generate`.
+        print('@tcm: CambrianLlamaForCausalLM.generate: position_ids.shape:', position_ids.shape)
+        print('@tcm: CambrianLlamaForCausalLM.generate: attention_mask.shape:', attention_mask.shape)
+        print('@tcm: CambrianLlamaForCausalLM.generate: input_embeds.shape:', inputs_embeds.shape)
         return super().generate(
             position_ids=position_ids,
             attention_mask=attention_mask,
