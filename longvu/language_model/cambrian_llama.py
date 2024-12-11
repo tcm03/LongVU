@@ -520,7 +520,7 @@ class CambrianLlamaForCausalLM(LlamaForCausalLM, CambrianMetaForCausalLM):
             inputs_embeds = self.get_model().embed_tokens(inputs)
 
         # pyre-fixme[16]: `LlamaForCausalLM` has no attribute `generate`.
-        print('@tcm: CambrianLlamaForCausalLM.generate: position_ids.shape:', position_ids.shape)
+        print('@tcm: CambrianLlamaForCausalLM.generate: position_ids.type:', type(position_ids))
         print('@tcm: CambrianLlamaForCausalLM.generate: attention_mask.shape:', attention_mask.shape)
         print('@tcm: CambrianLlamaForCausalLM.generate: input_embeds.shape:', inputs_embeds.shape)
         return super().generate(
