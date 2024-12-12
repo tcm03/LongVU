@@ -812,7 +812,8 @@ class CambrianMetaForCausalLM(ABC):
                 None,
             )
         print(f'@tcm: input_ids.shape: {input_ids.shape}')
-        print(f'@tcm: images.shape: {images.shape}')
+        print(f'@tcm: len(images): {len(images)}')
+        print(f'@tcm: images[0].shape: {images[0].shape}')
         image_aux_list = images
 
         split_sizes = None
