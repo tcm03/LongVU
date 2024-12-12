@@ -811,7 +811,8 @@ class CambrianMetaForCausalLM(ABC):
                 None,
                 None,
             )
-
+        print(f'@tcm: input_ids.shape: {input_ids.shape}')
+        print(f'@tcm: images.shape: {images.shape}')
         image_aux_list = images
 
         split_sizes = None
@@ -867,6 +868,8 @@ class CambrianMetaForCausalLM(ABC):
             bs = image_aux_list[0].shape[0]
             dtype = image_aux_list[0].dtype
 
+        print(f'@tcm: image_aux_features_list type: {type(image_aux_features_list)}')
+        print(f'@tcm: image_aux_features_list len: {len(image_aux_features_list)}')
         image_token_len = self.get_model().config.image_token_len
         query_num_list = self.get_model().config.query_num_list
 
@@ -937,6 +940,7 @@ class CambrianMetaForCausalLM(ABC):
                 )
                 query_features_i = query_features_i.view(bs, query_num, -1)
 
+                # @tcm: Probably here: the ensurance that concatenated visual and text embeddings dimension does not exceed context length of LLM
                 if split_sizes is not None:
                     try:
                         if "llama" in self.get_model().config.model_type:
