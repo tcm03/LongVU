@@ -48,7 +48,7 @@ def eval(args):
         print(f"video_id: {row['video_id']}")
         # qs = "This video is a Youtube video on one of the following categories: Education, Film & Animation, Comedy, Entertainment, Music, Howto & Style, and People & Blogs. The engagement rate defined for each such video is based on the number of potential likes and dislikes only when published on Youtube. The exact formula for the score is (likes-dislikes) / (likes+dislikes) and the final prediction label is either 0 (not engaged), 1 (neutral), or 2 (engaged) based on thresholding this score. Please predict one of the three labels for this video, based on its contents only."
         # qs = "Classify this video into one of three engagement levels by printing out ONLY a character of 0, 1, or 2, corresponding to being not engaged, neutral, or engaged, respectively."
-        qs = "Please print out either 0, 1, or 2 (corresponding to the video being not engaged, neutral, or engaged)."
+        qs = "Please print out either 0, 1, or 2 (corresponding to the video being not engaged, neutral, or engaged). After that, please explain why you evaluate the video to be not engaged, neutral, or engaged with the audience (in terms of likes over dislikes when published to social media)."
         # qs = "Please print out either 0, 1, or 2."
 
         ###
@@ -100,10 +100,20 @@ def eval(args):
         pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
         # pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         # print(f"Predicted: {pred}, Actual: {label}")
-        if pred[-1].isnumeric():
-            print(f'pred={int(pred[-1])}, label={label}')
-            preds.append(int(pred[-1]))
-            truths.append(label)
+        # if pred[-1].isnumeric():
+        #     print(f'pred={int(pred[-1])}, label={label}')
+        #     preds.append(int(pred[-1]))
+        #     truths.append(label)
+        ok = False
+        for c in pred:
+            if c.isnumeric():
+                print(f'pred={int(c)}, label={label}')
+                preds.append(int(c))
+                truths.append(label)
+                ok = True
+                break
+        if not ok:
+            print('@tcm: not found')
 
     accuracy = accuracy_score(truths, preds)
     print(f"Accuracy: {accuracy:.2f}")
