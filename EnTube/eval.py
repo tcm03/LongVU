@@ -98,6 +98,7 @@ def eval(args):
                 stopping_criteria=[stopping_criteria],
             )
         pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+        print(f'Output: {pred}')
         # pred = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         # print(f"Predicted: {pred}, Actual: {label}")
         # if pred[-1].isnumeric():
