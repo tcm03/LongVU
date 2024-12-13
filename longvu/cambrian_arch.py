@@ -795,7 +795,7 @@ class CambrianMetaForCausalLM(ABC):
         image_aux_attention_masks_list=None,
         image_sizes=None,
     ):
-        print('@tcm: CambrianMetaForCausalLM::prepare_inputs_labels_for_multimodal()')
+        # print('@tcm: CambrianMetaForCausalLM::prepare_inputs_labels_for_multimodal()')
         # vision_tower = self.get_vision_tower()
         vision_tower_aux_list = self.get_model().get_vision_tower_aux_list()
         if vision_tower_aux_list is None or images is None or input_ids.shape[1] == 1:
@@ -811,9 +811,9 @@ class CambrianMetaForCausalLM(ABC):
                 None,
                 None,
             )
-        print(f'@tcm: input_ids.shape: {input_ids.shape}')
-        print(f'@tcm: len(images): {len(images)}')
-        print(f'@tcm: images[0].shape: {images[0].shape}')
+        # print(f'@tcm: input_ids.shape: {input_ids.shape}')
+        # print(f'@tcm: len(images): {len(images)}')
+        # print(f'@tcm: images[0].shape: {images[0].shape}')
         # input_ids: (1, 53)
         # len(images): 2
         # images[0]: (1, 51, 3, 384, 384)
@@ -872,7 +872,7 @@ class CambrianMetaForCausalLM(ABC):
             bs = image_aux_list[0].shape[0]
             dtype = image_aux_list[0].dtype
 
-        print(f'@tcm: image_aux_features_list len: {len(image_aux_features_list)}')
+        # print(f'@tcm: image_aux_features_list len: {len(image_aux_features_list)}')
         # len(image_aux_features_list): 2
         image_token_len = self.get_model().config.image_token_len
         query_num_list = self.get_model().config.query_num_list

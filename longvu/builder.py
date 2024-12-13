@@ -160,7 +160,7 @@ def load_pretrained_model(
                     model_path, low_cpu_mem_usage=True, **kwargs
                 )
             else:
-                print('@tcm: here 1')
+                # print('@tcm: here 1')
                 print(f"Loading Cambrian from {model_path}")
                 tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
                 model = CambrianLlamaForCausalLM.from_pretrained(
@@ -220,7 +220,7 @@ def load_pretrained_model(
             vision_tower.to(device=device_map, dtype=torch.float16)
         image_processor = vision_tower.image_processor
     elif "cambrian" in model_name.lower():
-        print('@tcm: here 2')
+        # print('@tcm: here 2')
         mm_use_im_start_end = getattr(model.config, "mm_use_im_start_end", False)
         mm_use_im_patch_token = getattr(model.config, "mm_use_im_patch_token", True)
         if mm_use_im_patch_token:
