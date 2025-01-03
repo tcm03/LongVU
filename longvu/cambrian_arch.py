@@ -600,7 +600,7 @@ class CambrianMetaForCausalLM(ABC):
         image_aux_features_list = []
         chunk_size = 64 # if # frames > 64, divide into chunks of 64 frames each, encode, and then concatenate
         if encode_type == "dino":
-            image_aux = image_aux_list[-1] # image_aux.shape: [# frames, 3, 378, 378]
+            image_aux = image_aux_list[-1] # image_aux.shape: [10, 3, 378, 378]
             vision_tower_aux = vision_tower_aux_list[-1] # DinoVisionTower
             if image_aux.shape[0] > chunk_size:
                 image_aux_features_chunks = []
@@ -614,8 +614,7 @@ class CambrianMetaForCausalLM(ABC):
                 image_aux_features = vision_tower_aux(image_aux)
             return image_aux_features
         elif encode_type == "siglip":
-            image_aux = image_aux_list[0]
-            print(f'@tcm: In CambrianMetaForCausalLM.encode_images(): image_aux.shape={image_aux.shape}')
+            image_aux = image_aux_list[0] # image_aux.shape: [10, 3, 384, 384]
             vision_tower_aux = vision_tower_aux_list[0] # SiglipVisionTower
             if image_aux.shape[0] > chunk_size:
                 image_aux_features_chunks = []
@@ -828,8 +827,8 @@ class CambrianMetaForCausalLM(ABC):
         split_sizes = None
 
         if type(image_aux_list[0]) is list or image_aux_list[0].ndim == 5:
-            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): type(image_aux_list[0]): {type(image_aux_list[0])}')
             # type(image_aux_list[0]): torch.Tensor
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_list[0].shape: {image_aux_list[0].shape}')
             split_sizes_ori = [
                 1 if image.ndim == 3 else image.shape[0] for image in image_aux_list[0]
             ] # [10]
@@ -872,23 +871,26 @@ class CambrianMetaForCausalLM(ABC):
             # image_aux_features_dino.shape: [10, 576, 1536]
             # split_sizes: [10]
             # len(new_image_aux_list): 2
+            # selected_frame_indices_all: [tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])]
 
             image_aux_features_siglip = self.encode_images(
                 new_image_aux_list, encode_type="siglip"
             )
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_features_siglip.shape: {image_aux_features_siglip.shape}')
+            # image_aux_features_siglip.shape: [10, 576, 1152]
             image_aux_features_list = [
                 image_aux_features_siglip,
                 image_aux_features_dino,
             ]
 
-            bs = image_aux_features_list[0].shape[0]
-            dtype = new_image_aux_list[0].dtype
+            bs = image_aux_features_list[0].shape[0] # #frames = 10
+            dtype = new_image_aux_list[0].dtype # torch.Tensor
 
             frame_sizes = []
             for i in range(len(image_sizes)):
                 for j in range(split_sizes[i]):
                     frame_sizes.append(image_sizes[i])
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): frame_sizes: {frame_sizes}')
             image_sizes = frame_sizes
         else:
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): len(image_aux_list)={len(image_aux_list)}')
@@ -916,16 +918,19 @@ class CambrianMetaForCausalLM(ABC):
             vision_tower_aux_feature_list = []
             vision_tower_aux_attention_masks_list = []
             # get vision tokens from each vision tower
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): Projecting...')
             for aux_i in range(len(vision_tower_aux_list)):
                 image_aux_features = image_aux_features_list[aux_i]
-
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): {image_aux_features.shape} -> ', end='')
                 image_aux_features = getattr(
                     self.get_model(), "mm_projector_aux_{}".format(aux_i)
                 )(image_aux_features).to(dtype)
+                print(f'{image_aux_features.shape}')
                 if aux_i == 0:
                     global_context_feature = image_aux_features.mean(1).view(
                         bs, 1, 1, -1
                     )
+                    print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): global_context_feature.shape: {global_context_feature.shape}')
 
                 vision_tower_aux_feature_list.append(image_aux_features)
             input_mix_res = True
@@ -933,16 +938,20 @@ class CambrianMetaForCausalLM(ABC):
             # perform vision sampling for each query group
             # @tcm: phase 2
             for query_group_i, query_num in enumerate(query_num_list):
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_group_i={query_group_i}, query_num={query_num}')
                 query_features_i = (
                     self.get_model()
                     .vision_query[query_group_i, :]
                     .view(1, 1, 1, -1)
                     .expand(bs, query_num, -1, -1)
                 )
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_features_i[0]: {query_features_i[0]}')
                 global_context_feature_i = global_context_feature.expand(
                     -1, query_num, 1, -1
                 ).flatten(0, 1)
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): global_context_feature_i.shape: {global_context_feature_i.shape}')
                 query_side_len = int(query_num**0.5)
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_side_len: {query_side_len}')
                 if IS_XLA_AVAILABLE:
                     (
                         vision_tower_aux_feature_list_i,
@@ -969,6 +978,7 @@ class CambrianMetaForCausalLM(ABC):
                     *vision_tower_aux_attention_masks_list_i,
                 )
                 query_features_i = query_features_i.view(bs, query_num, -1)
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_features_i.shape: {query_features_i.shape}')
 
                 # @tcm: Probably here: the ensurance that concatenated visual and text embeddings dimension does not exceed context length of LLM
                 if split_sizes is not None:
@@ -976,25 +986,30 @@ class CambrianMetaForCausalLM(ABC):
                         if "llama" in self.get_model().config.model_type:
                             text_len = torch.where(input_ids[0] == 128002)[-1][0]
                         else:
-                            text_len = torch.where(input_ids[0] == 151643)[-1][0]
+                            text_len = torch.where(input_ids[0] == 151643)[-1][0] # bos_token_id
+                            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): text_len: {text_len}')
                     except:
                         text_len = len(input_ids[0])
+                    # "tokenizer_model_max_length": 10000
                     max_visual_len = (
                         self.get_model().config.tokenizer_model_max_length
                         - text_len
                         - getattr(self.get_model().config, "inference_max_length", 16)
                     )
+                    print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): max_visual_len: {max_visual_len}')
                     max_num_frames = max(
                         1,
                         math.floor(max_visual_len // (final_height * final_width)),
                     )
+                    print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): max_num_frames: {max_num_frames}')
                     max_num_frames_low = max(
                         1,
                         math.floor(
                             max_visual_len
-                            // (self.get_model().config.lowres_token ** 2)
+                            // (self.get_model().config.lowres_token ** 2) # "lowres_token": 8
                         ),
                     )
+                    print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): max_num_frames_low: {max_num_frames_low}')
                     if split_sizes[0] < max_num_frames:
                         input_mix_res = False
                     elif split_sizes[0] > max_num_frames_low:
@@ -1004,16 +1019,18 @@ class CambrianMetaForCausalLM(ABC):
                 # input_mix_res = False  # ablation
 
                 if (getattr(self.config, "highres", False)) and input_mix_res:
+                    print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): highres={getattr(self.config, "highres", False)}, input_mix_res={input_mix_res}')
                     _query_features_i = (
                         query_features_i.permute(0, 2, 1)
                         .contiguous()
                         .view(bs, -1, query_side_len, query_side_len)
                     )
+                    print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): _query_features_i[0].shape: {_query_features_i[0].shape}')
                     _query_features_i = F.interpolate(
                         _query_features_i.float(),
                         size=(
-                            self.get_model().config.lowres_token,
-                            self.get_model().config.lowres_token,
+                            self.get_model().config.lowres_token, # "lowres_token": 8
+                            self.get_model().config.lowres_token, # "lowres_token": 8
                         ),
                         mode="bilinear",
                         align_corners=False,
@@ -1021,11 +1038,13 @@ class CambrianMetaForCausalLM(ABC):
                     _query_features_i = (
                         _query_features_i.permute(0, 2, 3, 1).contiguous().flatten(1, 2)
                     )
+                    print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): after interpolation: _query_features_i[0].shape: {_query_features_i[0].shape}')
                     final_image_features_down_list.append(_query_features_i)
 
                 # interpolate to the final target size
                 # @tcm: In phase 2: dimension reduction
                 if query_side_len != final_height:
+                    print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_side_len != final_height')
                     query_features_i = (
                         query_features_i.permute(0, 2, 1)
                         .contiguous()
