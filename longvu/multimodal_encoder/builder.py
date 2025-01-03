@@ -6,11 +6,13 @@ from .siglip_encoder import SiglipVisionTower
 
 
 def build_vision_tower_aux_list(vision_tower_cfg, **kwargs):
+    # vision_tower_aux_name_list = ["siglip/CLIP-ViT-SO400M-14-384", "facebook/dinov2-giant-res378"]
     vision_tower_aux_name_list = getattr(
         vision_tower_cfg,
         "mm_vision_tower_aux_list",
         getattr(vision_tower_cfg, "vision_tower_aux_list", None),
     )
+    # vision_tower_aux_token_len_list = [576, 576]
     vision_tower_aux_token_len_list = getattr(
         vision_tower_cfg,
         "mm_vision_tower_aux_token_len_list",

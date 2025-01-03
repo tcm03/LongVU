@@ -57,7 +57,7 @@ def eval(args):
         # For Llama 3.2 (3B) and 16GB GPU memory: set # frame <= 56 for each video
         ###
 
-        FRAME_CONST = 50
+        FRAME_CONST = 10
         vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
         # print(f'len(vr) = {len(vr)}')
         fps = float(vr.get_avg_fps())
