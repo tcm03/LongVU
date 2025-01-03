@@ -398,7 +398,7 @@ class CambrianQwenForCausalLM(Qwen2ForCausalLM, CambrianMetaForCausalLM):
         image_sizes: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
-        position_ids = kwargs.pop("position_ids", None)
+        position_ids = kwargs.pop("position_ids", None) # None
         print(f'@tcm: In CambrianQwenForCausalLM.generate(): position_ids = {position_ids}')
         attention_mask = kwargs.pop("attention_mask", None)
         if "inputs_embeds" in kwargs:
@@ -408,6 +408,9 @@ class CambrianQwenForCausalLM(Qwen2ForCausalLM, CambrianMetaForCausalLM):
             print(f'@tcm: In CambrianQwenForCausalLM.generate(): inputs.shape = {inputs.shape if inputs is not None else None}')
             print(f'@tcm: In CambrianQwenForCausalLM.generate(): len(images) = {len(images) if images is not None else None}')
             print(f'@tcm: In CambrianQwenForCausalLM.generate(): image_sizes = {image_sizes}')
+            # inputs.shape: [1, 26]
+            # len(images): 2
+            # image_sizes = [(360, 640)]
             (
                 inputs,
                 position_ids,

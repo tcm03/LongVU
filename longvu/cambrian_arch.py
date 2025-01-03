@@ -828,9 +828,11 @@ class CambrianMetaForCausalLM(ABC):
 
         if type(image_aux_list[0]) is list or image_aux_list[0].ndim == 5:
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): type(image_aux_list[0]): {type(image_aux_list[0])}')
+            # type(image_aux_list[0]): torch.Tensor
             split_sizes_ori = [
                 1 if image.ndim == 3 else image.shape[0] for image in image_aux_list[0]
             ]
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): split_sizes_ori: {split_sizes_ori}')
             new_image_aux_list = []
             for image_aux in image_aux_list:
                 if type(image_aux) is list:
@@ -838,6 +840,7 @@ class CambrianMetaForCausalLM(ABC):
                         x.unsqueeze(0) if x.ndim == 3 else x for x in image_aux
                     ]
                 concat_image_aux = torch.cat([image for image in image_aux], dim=0)
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): concat_image_aux.shape: {concat_image_aux.shape}')
                 new_image_aux_list.append(concat_image_aux)
             image_aux_features_dino = self.encode_images(
                 new_image_aux_list, encode_type="dino"
