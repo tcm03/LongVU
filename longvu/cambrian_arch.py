@@ -849,6 +849,7 @@ class CambrianMetaForCausalLM(ABC):
                 new_image_aux_list, encode_type="dino"
             )
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_features_dino.shape: {image_aux_features_dino.shape}')
+            # image_aux_features_dino.shape: [10, 576, 1536]
 
             (
                 image_aux_features_dino,
@@ -867,7 +868,10 @@ class CambrianMetaForCausalLM(ABC):
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_features_dino.shape: {image_aux_features_dino.shape}')
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): split_sizes: {split_sizes}')
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): len(new_image_aux_list): {len(new_image_aux_list)}')
-            pritn(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): selected_frame_indices_all: {selected_frame_indices_all}')
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): selected_frame_indices_all: {selected_frame_indices_all}')
+            # image_aux_features_dino.shape: [10, 576, 1536]
+            # split_sizes: [10]
+            # len(new_image_aux_list): 2
 
             image_aux_features_siglip = self.encode_images(
                 new_image_aux_list, encode_type="siglip"
