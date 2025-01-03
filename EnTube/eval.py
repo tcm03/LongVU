@@ -118,6 +118,8 @@ def eval(args):
         if not ok:
             print('@tcm: not found')
 
+        break
+
     accuracy = accuracy_score(truths, preds)
     print(f"Accuracy: {accuracy:.2f}")
 
