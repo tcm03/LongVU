@@ -596,12 +596,12 @@ class CambrianMetaForCausalLM(ABC):
 
     def encode_images(self, image_aux_list, encode_type=None):
         vision_tower_aux_list = self.get_model().get_vision_tower_aux_list()
-        print(f'@tcm: In CambrianMetaForCausalLM.encode_images(): vision_tower_aux_list={vision_tower_aux_list}')
+        print(f'@tcm: In CambrianMetaForCausalLM.encode_images(): encode_type={encode_type}')
         image_aux_features_list = []
-        chunk_size = 64
+        chunk_size = 64 # if # frames > 64, divide into chunks of 64 frames each, encode, and then concatenate
         if encode_type == "dino":
-            image_aux = image_aux_list[-1]
-            vision_tower_aux = vision_tower_aux_list[-1]
+            image_aux = image_aux_list[-1] # image_aux.shape: [# frames, 3, 378, 378]
+            vision_tower_aux = vision_tower_aux_list[-1] # DinoVisionTower
             if image_aux.shape[0] > chunk_size:
                 image_aux_features_chunks = []
                 for start_idx in range(0, image_aux.shape[0], chunk_size):
@@ -615,7 +615,8 @@ class CambrianMetaForCausalLM(ABC):
             return image_aux_features
         elif encode_type == "siglip":
             image_aux = image_aux_list[0]
-            vision_tower_aux = vision_tower_aux_list[0]
+            print(f'@tcm: In CambrianMetaForCausalLM.encode_images(): image_aux.shape={image_aux.shape}')
+            vision_tower_aux = vision_tower_aux_list[0] # SiglipVisionTower
             if image_aux.shape[0] > chunk_size:
                 image_aux_features_chunks = []
                 for start_idx in range(0, image_aux.shape[0], chunk_size):
@@ -831,7 +832,7 @@ class CambrianMetaForCausalLM(ABC):
             # type(image_aux_list[0]): torch.Tensor
             split_sizes_ori = [
                 1 if image.ndim == 3 else image.shape[0] for image in image_aux_list[0]
-            ]
+            ] # [10]
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): split_sizes_ori: {split_sizes_ori}')
             new_image_aux_list = []
             for image_aux in image_aux_list:
@@ -840,11 +841,14 @@ class CambrianMetaForCausalLM(ABC):
                         x.unsqueeze(0) if x.ndim == 3 else x for x in image_aux
                     ]
                 concat_image_aux = torch.cat([image for image in image_aux], dim=0)
+                # concat_image_aux.shape: [10, 3, 384, 384]
+                # concat_image_aux.shape: [10, 3, 378, 378]
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): concat_image_aux.shape: {concat_image_aux.shape}')
                 new_image_aux_list.append(concat_image_aux)
             image_aux_features_dino = self.encode_images(
                 new_image_aux_list, encode_type="dino"
             )
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_features_dino.shape: {image_aux_features_dino.shape}')
 
             (
                 image_aux_features_dino,
@@ -859,10 +863,16 @@ class CambrianMetaForCausalLM(ABC):
                 image_sizes,
                 threshold=getattr(self.get_model().config, "dino_threshold", 0.83),
             )
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): After select_frame()')
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_features_dino.shape: {image_aux_features_dino.shape}')
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): split_sizes: {split_sizes}')
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): len(new_image_aux_list): {len(new_image_aux_list)}')
+            pritn(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): selected_frame_indices_all: {selected_frame_indices_all}')
 
             image_aux_features_siglip = self.encode_images(
                 new_image_aux_list, encode_type="siglip"
             )
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_features_siglip.shape: {image_aux_features_siglip.shape}')
             image_aux_features_list = [
                 image_aux_features_siglip,
                 image_aux_features_dino,
