@@ -1176,7 +1176,7 @@ class CambrianMetaForCausalLM(ABC):
                 for i, v in enumerate(vision_tower_aux_feature_list_final):
                     print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): vision_tower_aux_feature_list_final[{i}].shape: {v.shape}')
                 global_context_feature_final = []
-            # @tcm: loop for 10 batches
+            # @tcm: loop for 10 batches (10 frames)
             for batch_i in range(bs):
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): batch_i={batch_i}')
                 cur_image_feature = image_features[batch_i] # cur_image_feature.shape: [12, 12, 3584]
@@ -1187,6 +1187,7 @@ class CambrianMetaForCausalLM(ABC):
                 cur_image_feature = unpad_image(
                     cur_image_feature.unsqueeze(0), image_size
                 )
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): after unpad image: cur_image_feature.shape: {cur_image_feature.shape}')
 
                 cur_h, cur_w = cur_image_feature.shape[1:3] # 12, 12
                 try:  # fix bug for some invalid image
@@ -1268,6 +1269,7 @@ class CambrianMetaForCausalLM(ABC):
                     ),
                     dim=2,
                 )
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): after concat newline: cur_image_feature.shape: {cur_image_feature.shape}')
                 ## LONGVU
                 if split_sizes is None and getattr(self.config, "frame_pos", False):
                     frame_pos = (
@@ -1299,6 +1301,8 @@ class CambrianMetaForCausalLM(ABC):
                 image_features = image_features_downsample
             else:
                 image_features = image_features_unpadded
+
+        # @tcm: Done SVA
 
         # TODO: image start / end is not implemented here to support pretraining.
         if getattr(self.config, "tune_mm_mlp_adapter", False) and getattr(
@@ -1435,6 +1439,7 @@ class CambrianMetaForCausalLM(ABC):
 
         attention_mask = attention_mask | (input_ids == IMAGE_TOKEN_INDEX)
 
+        # @tcm: Masking the prompt ids if necessary
         input_ids = [
             cur_input_ids[cur_attention_mask]
             for cur_input_ids, cur_attention_mask in zip(input_ids, attention_mask)
@@ -1444,13 +1449,13 @@ class CambrianMetaForCausalLM(ABC):
             for cur_labels, cur_attention_mask in zip(labels, attention_mask)
         ]
 
-        ## LONGVU: Phase 2 should start from here
+        ## LONGVU: Phase 2 should start from here, shouldn't it?
         new_input_embeds = []
         new_labels = []
         image_token_indices_batch = []
         cur_image_idx = 0
         for batch_idx, cur_input_ids in enumerate(input_ids):
-            num_images = (cur_input_ids == IMAGE_TOKEN_INDEX).sum()
+            num_images = (cur_input_ids == IMAGE_TOKEN_INDEX).sum() # 1
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): batch_idx: {batch_idx}, cur_input_ids: {cur_input_ids}, num_images: {num_images}')
             if num_images == 0:
                 cur_image_features = image_features[cur_image_idx]
@@ -1487,23 +1492,25 @@ class CambrianMetaForCausalLM(ABC):
             cur_input_embeds = self.get_model().embed_tokens(
                 torch.cat(cur_input_ids_noim)
             ) # embeddings of prompt without image tokens
+            # cur_input_embeds.shape: torch.Size([25, 3584])
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): embeddings of prompt without image tokens: cur_input_embeds.shape: {cur_input_embeds.shape}')
-            cur_input_embeds_no_im = torch.split(cur_input_embeds, split_sizes, dim=0)
+            cur_input_embeds_no_im = torch.split(cur_input_embeds, split_sizes, dim=0) # len(cur_input_embeds_no_im): 2
+            # cur_input_embeds_no_im[0].shape: torch.Size([14, 3584])
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): len(cur_input_embeds_no_im): {len(cur_input_embeds_no_im)}')
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): cur_input_embeds_no_im[0].shape: {cur_input_embeds_no_im[0].shape}')
             cur_new_input_embeds = []
             cur_new_labels = []
 
             ## LONGVU
-            text_len = sum([x.shape[0] for x in cur_input_embeds_no_im])
+            text_len = sum([x.shape[0] for x in cur_input_embeds_no_im]) # 25
             print(f'@tcm: text_len no im: {text_len}')
-            visual_len = len(image_features[cur_image_idx])
+            visual_len = len(image_features[cur_image_idx]) # 840
             print(f'@tcm: visual_len: {visual_len}')
             max_visual_len = (
                 self.get_model().config.tokenizer_model_max_length
                 - getattr(self.get_model().config, "inference_max_length", 16)
                 - text_len
-            )
+            ) # 9959
             print(f'@tcm: max_visual_len: {max_visual_len}')
             mix_token = False
 
@@ -1635,6 +1642,7 @@ class CambrianMetaForCausalLM(ABC):
 
                 image_features[cur_image_idx] = new_visual_emb_frames[:max_visual_len]
 
+            # @tcm: This is where the visual/video embeddings are inserted into the prompt embeddings
             for i in range(num_images + 1):
                 cur_new_input_embeds.append(cur_input_embeds_no_im[i])
                 cur_new_labels.append(cur_labels_noim[i])
@@ -1653,7 +1661,7 @@ class CambrianMetaForCausalLM(ABC):
 
             cur_new_input_embeds = [x.to(self.device) for x in cur_new_input_embeds]
 
-            cur_new_input_embeds = torch.cat(cur_new_input_embeds)
+            cur_new_input_embeds = torch.cat(cur_new_input_embeds) # cur_new_input_embeds.shape: [865, 3584]
             print(f'@tcm: In CambrianMetaForCausalLM::prepare_inputs_labels_for_multimodal(): cur_new_input_embeds.shape: {cur_new_input_embeds.shape}')
             cur_new_labels = torch.cat(cur_new_labels)
 
