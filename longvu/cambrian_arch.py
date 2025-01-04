@@ -1451,6 +1451,7 @@ class CambrianMetaForCausalLM(ABC):
         cur_image_idx = 0
         for batch_idx, cur_input_ids in enumerate(input_ids):
             num_images = (cur_input_ids == IMAGE_TOKEN_INDEX).sum()
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): batch_idx: {batch_idx}, cur_input_ids: {cur_input_ids}, num_images: {num_images}')
             if num_images == 0:
                 cur_image_features = image_features[cur_image_idx]
                 cur_input_embeds_1 = self.get_model().embed_tokens(cur_input_ids)
@@ -1470,7 +1471,7 @@ class CambrianMetaForCausalLM(ABC):
             image_token_indices_batch.append(
                 torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0].tolist()[0]
             ) ## LONGVU
-            cur_input_ids_noim = []
+            cur_input_ids_noim = [] # prompt tokens ids without image tokens
             cur_labels = labels[batch_idx]
             cur_labels_noim = []
             for i in range(len(image_token_indices) - 1):
@@ -1485,19 +1486,25 @@ class CambrianMetaForCausalLM(ABC):
             split_sizes = [x.shape[0] for x in cur_labels_noim]
             cur_input_embeds = self.get_model().embed_tokens(
                 torch.cat(cur_input_ids_noim)
-            )
+            ) # embeddings of prompt without image tokens
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): embeddings of prompt without image tokens: cur_input_embeds.shape: {cur_input_embeds.shape}')
             cur_input_embeds_no_im = torch.split(cur_input_embeds, split_sizes, dim=0)
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): len(cur_input_embeds_no_im): {len(cur_input_embeds_no_im)}')
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): cur_input_embeds_no_im[0].shape: {cur_input_embeds_no_im[0].shape}')
             cur_new_input_embeds = []
             cur_new_labels = []
 
             ## LONGVU
             text_len = sum([x.shape[0] for x in cur_input_embeds_no_im])
+            print(f'@tcm: text_len no im: {text_len}')
             visual_len = len(image_features[cur_image_idx])
+            print(f'@tcm: visual_len: {visual_len}')
             max_visual_len = (
                 self.get_model().config.tokenizer_model_max_length
                 - getattr(self.get_model().config, "inference_max_length", 16)
                 - text_len
             )
+            print(f'@tcm: max_visual_len: {max_visual_len}')
             mix_token = False
 
             ## LONGVU
@@ -1647,15 +1654,17 @@ class CambrianMetaForCausalLM(ABC):
             cur_new_input_embeds = [x.to(self.device) for x in cur_new_input_embeds]
 
             cur_new_input_embeds = torch.cat(cur_new_input_embeds)
+            print(f'@tcm: In CambrianMetaForCausalLM::prepare_inputs_labels_for_multimodal(): cur_new_input_embeds.shape: {cur_new_input_embeds.shape}')
             cur_new_labels = torch.cat(cur_new_labels)
 
             new_input_embeds.append(cur_new_input_embeds)
             new_labels.append(cur_new_labels)
 
+        # @tcm: OKAY, from this line on, only labels processing, padding and truncating the embeddings sequence
         # Truncate sequences to max length as image embeddings can make the sequence longer
         tokenizer_model_max_length = getattr(
             self.config, "tokenizer_model_max_length", None
-        )
+        ) # 10,000
         if tokenizer_model_max_length is not None:
             new_input_embeds = [
                 x[:tokenizer_model_max_length] for x in new_input_embeds
@@ -1664,7 +1673,7 @@ class CambrianMetaForCausalLM(ABC):
 
         # Combine them
         max_len = max(x.shape[0] for x in new_input_embeds)
-        batch_size = len(new_input_embeds)
+        batch_size = len(new_input_embeds) # 1
         print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): batch_size = len(new_input_embeds): {batch_size}')
 
         new_input_embeds_padded = []
@@ -1689,6 +1698,7 @@ class CambrianMetaForCausalLM(ABC):
             zip(new_input_embeds, new_labels)
         ):
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): i={i}, cur_new_embed.shape: {cur_new_embed.shape}')
+            # cur_new_embed.shape: [865, 3584]
             cur_len = cur_new_embed.shape[0]
             if getattr(self.config, "tokenizer_padding_side", "right") == "left":
                 new_input_embeds_padded.append(
@@ -1727,6 +1737,7 @@ class CambrianMetaForCausalLM(ABC):
                         dim=0,
                     )
                 )
+                # new_input_embeds_padded[-1].shape: [865, 3584]
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): new_input_embeds_padded[-1].shape: {new_input_embeds_padded[-1].shape}')
                 if cur_len > 0:
                     new_labels_padded[i, :cur_len] = cur_new_labels
@@ -1739,7 +1750,7 @@ class CambrianMetaForCausalLM(ABC):
                     )
 
         
-        new_input_embeds = torch.stack(new_input_embeds_padded, dim=0)
+        new_input_embeds = torch.stack(new_input_embeds_padded, dim=0) # [1, 865, 3584]
         print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): final new_input_embeds.shape: {new_input_embeds.shape}')
 
         if _labels is None:
