@@ -917,7 +917,7 @@ class CambrianMetaForCausalLM(ABC):
             frame_sizes = []
             for i in range(len(image_sizes)):
                 for j in range(split_sizes[i]):
-                    frame_sizes.append(image    _sizes[i])
+                    frame_sizes.append(image_sizes[i])
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): frame_sizes: {frame_sizes}')
             image_sizes = frame_sizes # [(360, 640), ..., (360, 640)] (len = # frames)
         else:
