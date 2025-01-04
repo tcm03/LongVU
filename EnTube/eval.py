@@ -69,7 +69,7 @@ def eval(args):
         for frame_index in frame_indices:
             img = vr[frame_index].asnumpy()
             video.append(img)
-        # print(f'frame shape: {img.shape}')
+        print(f'@tcm: In eval.py: frame shape: {img.shape}')
         video = np.stack(video)
         image_sizes = [video[0].shape[:2]]
         # print(f'image_sizes = {image_sizes}')

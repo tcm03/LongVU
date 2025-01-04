@@ -406,7 +406,8 @@ class CambrianQwenForCausalLM(Qwen2ForCausalLM, CambrianMetaForCausalLM):
 
         if images is not None:
             print(f'@tcm: In CambrianQwenForCausalLM.generate(): inputs.shape = {inputs.shape if inputs is not None else None}')
-            print(f'@tcm: In CambrianQwenForCausalLM.generate(): len(images) = {len(images) if images is not None else None}')
+            print(f'@tcm: In CambrianQwenForCausalLM.generate(): images[0].shape = {images[0].shape}')
+            print(f'@tcm: In CambrianQwenForCausalLM.generate(): images[1].shape = {images[1].shape}')
             print(f'@tcm: In CambrianQwenForCausalLM.generate(): image_sizes = {image_sizes}')
             # inputs.shape: [1, 26]
             # len(images): 2
@@ -448,6 +449,7 @@ class CambrianQwenForCausalLM(Qwen2ForCausalLM, CambrianMetaForCausalLM):
         else:
             inputs_embeds = self.get_model().embed_tokens(inputs)
 
+        print(f'@tcm: In CambrianQwenForCausalLM::generate(): inputs_embeds.shape: {inputs_embeds.shape}')
         # pyre-fixme[16]: `Qwen2ForCausalLM` has no attribute `generate`.
         return super().generate(
             position_ids=position_ids,

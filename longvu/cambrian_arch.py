@@ -595,6 +595,17 @@ class CambrianMetaForCausalLM(ABC):
         )
 
     def encode_images(self, image_aux_list, encode_type=None):
+        """
+        by @tcm
+        Args:
+            image_aux_list: list of torch.Tensor, each tensor has shape [(batch_size, ?) # frames, 3, H, W]
+                image_aux_list[0]: tensor for SigLIP
+                image_aux_list[1]: tensor for DINOv2
+            encode_type: either "siglip", "dino", or None for both
+        Returns:
+            torch.Tensor if encode_type="siglip"|"dino"
+            List[torch.Tensor] if encode_type=None
+        """
         vision_tower_aux_list = self.get_model().get_vision_tower_aux_list()
         print(f'@tcm: In CambrianMetaForCausalLM.encode_images(): encode_type={encode_type}')
         image_aux_features_list = []
@@ -658,7 +669,26 @@ class CambrianMetaForCausalLM(ABC):
         window_size=16,
         threshold=0.83,
     ):
-        dino_features_batch = torch.split(feature_list, split_sizes, dim=0)
+        """
+        by @tcm:
+        Description: Select frames from DINOv2 features based on the similarity below a threshold
+         between frames within a given window size
+        Args:
+            feature_list: torch.Tensor of DINOv2 features, .e.g shape [10, 576, 1536]
+            split_sizes: list of int, e.g. [10]
+            input_ids: torch.Tensor, e.g. shape [1, 26]
+            new_image_aux_list: 2 torch.Tensor for SigLIP and DINOv2, e.g. [ [10, 3, 378, 378], [10, 3, 384, 384] ]
+            image_sizes: list of tuple, e.g. [(384, 384)]
+            window_size: int, e.g. 16
+            threshold: float, e.g. 0.83
+        Returns:
+            list of torch.Tensor of selected frames
+                image_aux_features_dino,
+                split_sizes,
+                new_image_aux_list,
+                selected_frame_indices_all
+        """
+        dino_features_batch = torch.split(feature_list, split_sizes, dim=0) # ([10, 576, 1536])
         new_image_aux_batch_0 = torch.split(new_image_aux_list[0], split_sizes, dim=0)
         new_image_aux_batch_1 = torch.split(new_image_aux_list[1], split_sizes, dim=0)
         new_split_sizes = []
@@ -673,12 +703,12 @@ class CambrianMetaForCausalLM(ABC):
                 else:
                     text_len = torch.where(input_ids[i_batch] == 151643)[-1][0]
             except:
-                text_len = len(input_ids[i_batch])
+                text_len = len(input_ids[i_batch]) # 26
             original_width, original_height = image_sizes[i_batch]
-            if getattr(self.get_model().config, "highres", False):
-                token_per_frame = self.get_model().config.lowres_token ** 2
+            if getattr(self.get_model().config, "highres", False): # true
+                token_per_frame = self.get_model().config.lowres_token ** 2 # 8^2=64, number of tokens per low-res frame
             else:
-                token_per_frame = self.get_model().config.image_token_len
+                token_per_frame = self.get_model().config.image_token_len # 144
             # current_height, current_width = token_per_side, token_per_side
             # original_aspect_ratio = original_width / original_height
             # current_aspect_ratio = current_width / current_height
@@ -702,12 +732,12 @@ class CambrianMetaForCausalLM(ABC):
             max_num_frames = max(
                 1,
                 (
-                    self.get_model().config.tokenizer_model_max_length
+                    self.get_model().config.tokenizer_model_max_length # 10,000
                     - text_len
                     - getattr(self.get_model().config, "inference_max_length", 16)
                 )
                 // token_per_frame,
-            )
+            ) # 9958 / 64 = 155.59
             if len(frame_features) < max_num_frames:
                 selected_frames_all_0.append(new_image_aux_batch_0[i_batch])
                 selected_frames_all_1.append(new_image_aux_batch_1[i_batch])
@@ -816,22 +846,19 @@ class CambrianMetaForCausalLM(ABC):
                 None,
                 None,
             )
-        # print(f'@tcm: input_ids.shape: {input_ids.shape}')
-        # print(f'@tcm: len(images): {len(images)}')
-        # print(f'@tcm: images[0].shape: {images[0].shape}')
-        # input_ids: (1, 53)
-        # len(images): 2
-        # images[0]: (1, 51, 3, 384, 384)
-        image_aux_list = images
+
+        image_aux_list = images # for each vision tower: batch of videos (1 during inference)
 
         split_sizes = None
 
+        ## LONGVU
         if type(image_aux_list[0]) is list or image_aux_list[0].ndim == 5:
             # type(image_aux_list[0]): torch.Tensor
-            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_list[0].shape: {image_aux_list[0].shape}')
+            # image_aux_list[0].shape: torch.Size([1, 10, 3, 384, 384]) # batch_size, # frames, # channels, height, width
             split_sizes_ori = [
                 1 if image.ndim == 3 else image.shape[0] for image in image_aux_list[0]
             ] # [10]
+            # @tcm: split_sizes_ori is # frames for each video in the batch of the first vision tower (same with other towers?)
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): split_sizes_ori: {split_sizes_ori}')
             new_image_aux_list = []
             for image_aux in image_aux_list:
@@ -840,10 +867,11 @@ class CambrianMetaForCausalLM(ABC):
                         x.unsqueeze(0) if x.ndim == 3 else x for x in image_aux
                     ]
                 concat_image_aux = torch.cat([image for image in image_aux], dim=0)
-                # concat_image_aux.shape: [10, 3, 384, 384]
-                # concat_image_aux.shape: [10, 3, 378, 378]
+                # 1st vision tower: concat_image_aux.shape: [10, 3, 384, 384]
+                # 2nd vision tower: concat_image_aux.shape: [10, 3, 378, 378]
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): concat_image_aux.shape: {concat_image_aux.shape}')
                 new_image_aux_list.append(concat_image_aux)
+            # new_image_aux_list has 2 tensors of pixel values for SigLIP and DINOv2
             image_aux_features_dino = self.encode_images(
                 new_image_aux_list, encode_type="dino"
             )
@@ -889,9 +917,9 @@ class CambrianMetaForCausalLM(ABC):
             frame_sizes = []
             for i in range(len(image_sizes)):
                 for j in range(split_sizes[i]):
-                    frame_sizes.append(image_sizes[i])
+                    frame_sizes.append(image    _sizes[i])
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): frame_sizes: {frame_sizes}')
-            image_sizes = frame_sizes
+            image_sizes = frame_sizes # [(360, 640), ..., (360, 640)] (len = # frames)
         else:
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): len(image_aux_list)={len(image_aux_list)}')
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_aux_list[0].shape={image_aux_list[0].shape}')
@@ -907,7 +935,7 @@ class CambrianMetaForCausalLM(ABC):
         final_height = final_width = int(image_token_len**0.5) # 12
 
         final_image_features_list = []
-        final_image_features_down_list = []
+        final_image_features_down_list = [] ## LONGVU
 
         # only needed for sva
         vision_tower_aux_feature_list_final = None
@@ -919,6 +947,7 @@ class CambrianMetaForCausalLM(ABC):
             vision_tower_aux_attention_masks_list = []
             # get vision tokens from each vision tower
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): Projecting...')
+            # project SigLIP and DINOv2 features to same hidden dimension
             for aux_i in range(len(vision_tower_aux_list)):
                 image_aux_features = image_aux_features_list[aux_i]
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): {image_aux_features.shape} -> ', end='')
@@ -936,10 +965,10 @@ class CambrianMetaForCausalLM(ABC):
                     print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): global_context_feature.shape: {global_context_feature.shape}')
 
                 vision_tower_aux_feature_list.append(image_aux_features)
-            input_mix_res = True
-            input_high_res = True
+            input_mix_res = True ## LONGVU
+            input_high_res = True ## LONGVU
             # perform vision sampling for each query group
-            # @tcm: phase 2
+            # @tcm: maybe phase 2? Honestly, I don't understand what Cambrian is doing here
             for query_group_i, query_num in enumerate(query_num_list):
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_group_i={query_group_i}, query_num={query_num}')
                 # query_group_i=0, query_num=144
@@ -949,6 +978,7 @@ class CambrianMetaForCausalLM(ABC):
                     .view(1, 1, 1, -1)
                     .expand(bs, query_num, -1, -1)
                 )
+                # query_features_i[0].shape: [144, 1, 1024]
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_features_i[0].shape: {query_features_i[0].shape}')
                 global_context_feature_i = global_context_feature.expand(
                     -1, query_num, 1, -1
@@ -985,6 +1015,7 @@ class CambrianMetaForCausalLM(ABC):
                 query_features_i = query_features_i.view(bs, query_num, -1) # query_features_i.shape: [10, 144, 1024]
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_features_i.shape: {query_features_i.shape}')
 
+                ## LONGVU
                 # @tcm: Probably here: the ensurance that concatenated visual and text embeddings dimension does not exceed context length of LLM
                 if split_sizes is not None:
                     try:
@@ -996,11 +1027,12 @@ class CambrianMetaForCausalLM(ABC):
                     except:
                         text_len = len(input_ids[0])
                     
+                    # text_len=26
                     print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): text_len: {text_len}')
                     max_visual_len = (
                         self.get_model().config.tokenizer_model_max_length # "tokenizer_model_max_length": 10000
                         - text_len
-                        - getattr(self.get_model().config, "inference_max_length", 16)
+                        - getattr(self.get_model().config, "inference_max_length", 16) # 16
                     ) # max_visual_len: 9958
                     print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): max_visual_len: {max_visual_len}')
                     max_num_frames = max(
@@ -1023,7 +1055,7 @@ class CambrianMetaForCausalLM(ABC):
                         input_high_res = False
 
                 # input_mix_res = False  # ablation
-
+                ## LONGVU
                 if (getattr(self.config, "highres", False)) and input_mix_res:
                     print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): highres={getattr(self.config, "highres", False)}, input_mix_res={input_mix_res}')
                     _query_features_i = (
@@ -1090,7 +1122,6 @@ class CambrianMetaForCausalLM(ABC):
         else:
             final_image_features_list = image_aux_features_list
 
-        # @tcm: phase 3 from here?
         image_features = torch.cat(final_image_features_list, -1) # image_features.shape: [10, 144, 1024]
         print(f'@tcm: final image_features.shape: {image_features.shape}') 
         image_features = self.get_model().mm_projector(image_features).to(dtype) # image_features.shape: [10, 144, 3584]
@@ -1119,8 +1150,9 @@ class CambrianMetaForCausalLM(ABC):
             final_size = [(final_height, final_width)] * bs
 
         else:
-            image_features = image_features.view(bs, final_height, final_width, -1)
+            image_features = image_features.view(bs, final_height, final_width, -1) # image_features.shape: [10, 12, 12, 3584]
             print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): else image_features.shape: {image_features.shape}')
+            ## LONGVU
             if (getattr(self.config, "highres", False)) and input_mix_res:
                 print(f'@tcm: image_features_down')
                 image_features_down = image_features_down.view(
@@ -1130,7 +1162,7 @@ class CambrianMetaForCausalLM(ABC):
                     -1,
                 )
             image_features_unpadded = []
-            image_features_downsample = []
+            image_features_downsample = [] ## LONGVU
             final_size = []
             if self.get_model().config.mm_projector_type == "sva":
                 (
@@ -1139,21 +1171,24 @@ class CambrianMetaForCausalLM(ABC):
                 ) = self.rearrange_vision_tower_features_inference(
                     vision_tower_aux_feature_list, final_height, image_sizes, unpad=True
                 )
+                # vision_tower_aux_feature_list_final[0].shape: [720, 4, 1024]
+                # vision_tower_aux_feature_list_final[1].shape: [720, 4, 1024]
                 for i, v in enumerate(vision_tower_aux_feature_list_final):
                     print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): vision_tower_aux_feature_list_final[{i}].shape: {v.shape}')
                 global_context_feature_final = []
+            # @tcm: loop for 10 batches
             for batch_i in range(bs):
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): batch_i={batch_i}')
-                cur_image_feature = image_features[batch_i]
+                cur_image_feature = image_features[batch_i] # cur_image_feature.shape: [12, 12, 3584]
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): cur_image_feature.shape: {cur_image_feature.shape}')
-                image_size = image_sizes[batch_i]
+                image_size = image_sizes[batch_i] # image_size: (360, 640)
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): image_size: {image_size}')
 
                 cur_image_feature = unpad_image(
                     cur_image_feature.unsqueeze(0), image_size
                 )
 
-                cur_h, cur_w = cur_image_feature.shape[1:3]
+                cur_h, cur_w = cur_image_feature.shape[1:3] # 12, 12
                 try:  # fix bug for some invalid image
                     cur_image_feature = cur_image_feature.view(1, cur_h, cur_w, -1)
                     final_size.append((cur_h, cur_w))
@@ -1164,7 +1199,8 @@ class CambrianMetaForCausalLM(ABC):
                     cur_h, cur_w = cur_image_feature.shape[1:3]
                     cur_image_feature = cur_image_feature.view(1, cur_h, cur_w, -1)
                     final_size.append((cur_h, cur_w))
-
+                
+                ## LONGVU
                 if (getattr(self.config, "highres", False)) and input_mix_res:
                     print(f'@tcm: highres={getattr(self.config, "highres", False)} and input_mix_res={input_mix_res}')
                     cur_image_feature_down = unpad_image(
@@ -1232,7 +1268,7 @@ class CambrianMetaForCausalLM(ABC):
                     ),
                     dim=2,
                 )
-
+                ## LONGVU
                 if split_sizes is None and getattr(self.config, "frame_pos", False):
                     frame_pos = (
                         self.get_model()
@@ -1242,14 +1278,14 @@ class CambrianMetaForCausalLM(ABC):
                     )
                     cur_image_feature += frame_pos
 
-                cur_image_feature = cur_image_feature.flatten(1, 2)
-                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): after loop: cur_image_feature.shape: {cur_image_feature.shape}')
+                cur_image_feature = cur_image_feature.flatten(1, 2) # cur_image_feature.shape: [1, 84, 3584]
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): after loop body: cur_image_feature.shape: {cur_image_feature.shape}')
                 image_features_unpadded.append(cur_image_feature.squeeze(0))
 
                 if self.get_model().config.mm_projector_type == "sva":
                     cur_global_context_feature = global_context_feature[batch_i].expand(
                         cur_h * cur_w, 1, -1
-                    )
+                    ) # cur_global_context_feature.shape: [72, 1, 1024]
                     print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): cur_global_context_feature.shape: {cur_global_context_feature.shape}')
                     global_context_feature_final.append(cur_global_context_feature)
             if self.get_model().config.mm_projector_type == "sva":
@@ -1258,6 +1294,7 @@ class CambrianMetaForCausalLM(ABC):
                 )
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): global_context_feature_final.shape: {global_context_feature_final.shape}')
 
+            ## LONGVU
             if (getattr(self.config, "highres", False)) and input_mix_res:
                 image_features = image_features_downsample
             else:
@@ -1272,6 +1309,7 @@ class CambrianMetaForCausalLM(ABC):
         split_image_features_unpadded = None
         frame_split_sizes = None
 
+        ## LONGVU
         if split_sizes is not None:
             split_image_features = []
             split_image_features_unpadded = (
@@ -1406,6 +1444,7 @@ class CambrianMetaForCausalLM(ABC):
             for cur_labels, cur_attention_mask in zip(labels, attention_mask)
         ]
 
+        ## LONGVU: Phase 2 should start from here
         new_input_embeds = []
         new_labels = []
         image_token_indices_batch = []
@@ -1430,7 +1469,7 @@ class CambrianMetaForCausalLM(ABC):
             )
             image_token_indices_batch.append(
                 torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0].tolist()[0]
-            )
+            ) ## LONGVU
             cur_input_ids_noim = []
             cur_labels = labels[batch_idx]
             cur_labels_noim = []
@@ -1451,6 +1490,7 @@ class CambrianMetaForCausalLM(ABC):
             cur_new_input_embeds = []
             cur_new_labels = []
 
+            ## LONGVU
             text_len = sum([x.shape[0] for x in cur_input_embeds_no_im])
             visual_len = len(image_features[cur_image_idx])
             max_visual_len = (
@@ -1460,6 +1500,8 @@ class CambrianMetaForCausalLM(ABC):
             )
             mix_token = False
 
+            ## LONGVU
+            # @tcm: Phase 2 - Selective Feature Reduction via Cross-modal Query
             # ablation mix
             if (
                 input_mix_res
@@ -1527,7 +1569,7 @@ class CambrianMetaForCausalLM(ABC):
                                 mix_visual_emb_frame, dim=0
                             )
             # ablation drop
-
+            ## LONGVU
             if (
                 max_visual_len < visual_len
                 and frame_split_sizes is not None

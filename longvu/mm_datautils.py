@@ -266,7 +266,12 @@ def expand2square(pil_img, background_color):
 # pyre-fixme[3]: Return type must be annotated.
 # pyre-fixme[2]: Parameter must be annotated.
 def process_images(images, image_processor, model_cfg):
+    """
+    # @tcm: seem like: crop size to square, resize to target resolution, obtain tensor of pixel values, .half().cuda()
+    return: List[torch.Tensor]
+    """
     if isinstance(image_processor, list):
+        print(f'@tcm: In process_images(): processors of DINOv2 and SIGLIP')
         processor_aux_list = image_processor
         new_images_aux_list = []
         for image in images:
