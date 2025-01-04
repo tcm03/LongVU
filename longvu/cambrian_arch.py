@@ -851,7 +851,7 @@ class CambrianMetaForCausalLM(ABC):
 
         split_sizes = None
 
-        ## LONGVU
+        ## LONGVU: Phase 1
         if type(image_aux_list[0]) is list or image_aux_list[0].ndim == 5:
             # type(image_aux_list[0]): torch.Tensor
             # image_aux_list[0].shape: torch.Size([1, 10, 3, 384, 384]) # batch_size, # frames, # channels, height, width
@@ -968,7 +968,7 @@ class CambrianMetaForCausalLM(ABC):
             input_mix_res = True ## LONGVU
             input_high_res = True ## LONGVU
             # perform vision sampling for each query group
-            # @tcm: maybe phase 2? Honestly, I don't understand what Cambrian is doing here
+            # @tcm: SVA
             for query_group_i, query_num in enumerate(query_num_list):
                 print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): query_group_i={query_group_i}, query_num={query_num}')
                 # query_group_i=0, query_num=144
@@ -1512,6 +1512,7 @@ class CambrianMetaForCausalLM(ABC):
                 and frame_split_sizes is not None
                 and getattr(self.config, "highres", False)
             ):
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): ablation mix')
                 if max_visual_len > visual_len:
                     visual_emb = image_features[cur_image_idx]
                     text_emb = cur_input_embeds_no_im[-1]
@@ -1575,6 +1576,7 @@ class CambrianMetaForCausalLM(ABC):
                 and frame_split_sizes is not None
                 and not mix_token
             ):
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): ablation drop')
                 visual_emb_frame = image_features[cur_image_idx].reshape(
                     frame_split_sizes[cur_image_idx],
                     -1,
