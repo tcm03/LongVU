@@ -1665,6 +1665,7 @@ class CambrianMetaForCausalLM(ABC):
         # Combine them
         max_len = max(x.shape[0] for x in new_input_embeds)
         batch_size = len(new_input_embeds)
+        print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): batch_size = len(new_input_embeds): {batch_size}')
 
         new_input_embeds_padded = []
         new_labels_padded = torch.full(
@@ -1687,6 +1688,7 @@ class CambrianMetaForCausalLM(ABC):
         for i, (cur_new_embed, cur_new_labels) in enumerate(
             zip(new_input_embeds, new_labels)
         ):
+            print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): i={i}, cur_new_embed.shape: {cur_new_embed.shape}')
             cur_len = cur_new_embed.shape[0]
             if getattr(self.config, "tokenizer_padding_side", "right") == "left":
                 new_input_embeds_padded.append(
@@ -1725,6 +1727,7 @@ class CambrianMetaForCausalLM(ABC):
                         dim=0,
                     )
                 )
+                print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): new_input_embeds_padded[-1].shape: {new_input_embeds_padded[-1].shape}')
                 if cur_len > 0:
                     new_labels_padded[i, :cur_len] = cur_new_labels
                     attention_mask[i, :cur_len] = True
@@ -1735,7 +1738,9 @@ class CambrianMetaForCausalLM(ABC):
                         device=position_ids.device,
                     )
 
+        
         new_input_embeds = torch.stack(new_input_embeds_padded, dim=0)
+        print(f'@tcm: In CambrianMetaForCausalLM.prepare_inputs_labels_for_multimodal(): final new_input_embeds.shape: {new_input_embeds.shape}')
 
         if _labels is None:
             new_labels = None
@@ -1750,6 +1755,7 @@ class CambrianMetaForCausalLM(ABC):
         if _position_ids is None:
             position_ids = None
 
+        # new_inputs_embeds.shape: torch.Size([1, 865, 3584])
         return (
             None,
             position_ids,

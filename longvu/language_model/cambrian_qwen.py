@@ -450,6 +450,7 @@ class CambrianQwenForCausalLM(Qwen2ForCausalLM, CambrianMetaForCausalLM):
             inputs_embeds = self.get_model().embed_tokens(inputs)
 
         print(f'@tcm: In CambrianQwenForCausalLM::generate(): inputs_embeds.shape: {inputs_embeds.shape}')
+        # inputs_embeds.shape: torch.Size([1, 865, 3584])
         # pyre-fixme[16]: `Qwen2ForCausalLM` has no attribute `generate`.
         return super().generate(
             position_ids=position_ids,
